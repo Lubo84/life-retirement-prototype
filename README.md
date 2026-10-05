@@ -21,7 +21,7 @@ The Age Pension module now uses the Australian rules snapshot effective 20 Septe
 
 First-ten-year and later-year headline figures are averages of annual spending. The age-90 balance is opening assets at age 90 from the same cash flows. Known expenses are deducted once at retirement before allocating savings. Savings outside super are included in a proportional invested pool; minimum pension drawdowns apply only to the pension fraction. Excess minimum withdrawals are kept as accessible cash, rather than assumed to be spent. If invested assets become insufficient, cash is used; after accessible assets deplete, spending falls to available lifetime, pension and other income. The UI flags the first shortfall age.
 
-Model assumptions remain deliberately illustrative: 2% real pre-retirement super growth without contributions; 3% Growth / 2% Balanced / 1% Conservative net real retirement returns; 0% real cash return; 2.5% inflation. Future pension rates and thresholds are frozen in real terms. Original nominal lifetime purchase price is deflated over retirement for assessment in today's dollars. Lifetime payout defaults to 5.5%, can be adjusted, and assumes CPI indexing. It is neither a quoted product rate nor an investment return. A lifetime payout can include return of purchase capital and longevity pooling.
+Model assumptions remain deliberately illustrative: 2% real pre-retirement super growth with optional annual contributions after tax (default zero, combined for couples, credited at year end); 3% Growth / 2% Balanced / 1% Conservative net real retirement returns; 0% real cash return; 2.5% inflation. Future pension rates and thresholds are frozen in real terms. Original nominal lifetime purchase price is deflated over retirement for assessment in today's dollars. Lifetime payout defaults to 5.5%, can be adjusted, and assumes CPI indexing. It is neither a quoted product rate nor an investment return. A lifetime payout can include return of purchase capital and longevity pooling.
 
 ## Limits
 
@@ -31,10 +31,20 @@ Assumes residence eligibility, retirement from age 60 for both partners and both
 
 Run `node tests/model.test.mjs`. Tests verify published rate arithmetic, both-test selection, deeming, partner age eligibility, homeowner thresholds, age-85/five-year step-down, higher lifetime income reducing an income-tested pension, allocation constraints, minimum pension rates, and conservation of funds across every projected year. They also check spending averages and the age-90 balance against annual cash flows across multiple profiles and trade-offs.
 
-Browser visual testing and live WebMCP registration validation were unavailable in the permitted environment. Optional WebMCP tools are feature-detected.
+Optional WebMCP tools are feature-detected. Automated checks do not replace member usability testing or financial model validation.
 
 ## Experience revision — 5 October 2026
 
 The mobile Explore view now keeps a compact outcome summary sticky and shows adjustment consequences directly below the active control. The review screen compares the real combined plan against its original starting point, rather than isolated hypothetical slider effects. Income targets are visibly optional comparison goals with a plain-language gap and action. Profile edits preserve preferences and exploration positions; editing priorities is an explicit separate action using draft answers until completion. Small effects use material-change wording. Projection periods reflect available years, and no later period is represented by null rather than $0. Zero-capital cases have no invented allocation. Starting-point explanations include actual amounts. The downloaded summary leads with the current priorities and combined changes. Dialog naming, radio keyboard behaviour, readable consequence text and a persistent prototype indicator have been added.
 
 Run `node tests/experience.test.mjs` for source-driven controller and rendering checks. This harness exercises the actual handlers and templates, but does not render layout or replace browser/device/screen-reader testing. The member usability protocol is in `docs/member-usability-check.md`; member testing remains necessary before claiming a perfect experience score.
+
+## Decision support revision — 5 October 2026
+
+Visible stacked income bars show the first year, first estimated Age Pension year, later spending transition and later ages. The annual target is marked separately from period averages. Results lead with lifestyle, continuing income and accessible savings; reserves and projection details expand on demand. Allocation rules and the illustrative investment setting are explained beside the LIFE allocations.
+
+The shortfall dialog recalculates individual alternatives and shows first-year income, early average, remaining gap, accessible capital and money at 90. Applying an alternative preserves other choices. Exhausted controls are omitted. Later retirement is offered only before retirement; it can alter the illustrative investment setting and continues entered contributions. Lowering a target affects the comparison only.
+
+An expandable sensitivity comparison reduces retirement investment returns by one percentage point each year with unchanged spending preferences. It recalculates Age Pension and cash flows; it is neither a probability range nor modelling of market shocks. Renter and contribution limitations are surfaced at the relevant inputs and outputs. A real Hostplus advice-options link accompanies a personalised conversation checklist; entries are not transmitted. Downloads include key annual incomes, the gap, questions, allocation basis and lower-return results.
+
+Run `node tests/decision-support.test.mjs` as well as the model and experience checks. Current rule inputs are unchanged by this revision.
