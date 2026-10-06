@@ -18,10 +18,38 @@ export function pensionAssessment(p,s,age=p.retirementAge,balances={abp:s.accoun
 const assetTest=clamp(max-Math.max(0,assessableAssets-assetsFree)*R.assetsTaperAnnualPerDollar,0,max)*portion,incomeTest=clamp(max-Math.max(0,assessableIncome-incomeFree)*.5,0,max)*portion,payment=p.pensionExpectation==='none'?0:Math.min(assetTest,incomeTest);return {payment,assetTest,incomeTest,assessableAssets,assessableIncome,deemedIncome:deemed,lifetimeAssets,eligibleCount:eligible,limitingTest:eligible===0?'Not yet age eligible':p.pensionExpectation==='none'?'Excluded by you':Math.abs(assetTest-incomeTest)<.01?'Both tests':assetTest<incomeTest?'Assets test':'Income test'};}
 export function calculateAgePension(p,s,age=p.retirementAge,balances){return pensionAssessment(p,s,age,balances).payment;}
 export function minimumPensionRate(age){return age<65?.04:age<75?.05:age<80?.06:age<85?.07:age<90?.09:age<95?.11:.14;}
-export function project(p,s,prefs=defaultPreferences){let abp=s.accountBasedPension,cash=s.liquidReserve;const a=s.lifeAllocation,life=calculateLifetimeIncome(s),r={Growth:.03,Balanced:.02,Conservative:.01}[s.investmentOption]+(p.returnAdjustment??0),earlyDraw=s.capital*(a.I/100*.095+a.F/100*.015),laterDraw=s.capital*(a.I/100*.035+a.F/100*.027)*[.9,1,1.15][prefs.laterSpending],rows=[];let depletedAge=null,shortfallAge=null;
-for(let age=p.retirementAge;age<=95;age++){const t=age-p.retirementAge,assessment=pensionAssessment(p,s,age,{abp,cash}),plannedOwn=t<10?earlyDraw:laterDraw,openingAbp=abp,openingCash=cash;abp*=1+r;const minRate=p.relationshipStatus==='couple'?minimumPensionRate(age)*s.memberShare+minimumPensionRate(s.partnerRetirementAge+t)*(1-s.memberShare):minimumPensionRate(age),minimumDraw=openingAbp*minRate*s.pensionFraction,withdrawal=Math.min(abp,Math.max(plannedOwn,minimumDraw)),spentFromAbp=Math.min(plannedOwn,withdrawal);abp-=withdrawal;cash+=withdrawal-spentFromAbp;const spentFromCash=Math.min(cash,Math.max(0,plannedOwn-spentFromAbp));cash-=spentFromCash;const actualOwn=spentFromAbp+spentFromCash;if(shortfallAge===null&&plannedOwn-actualOwn>1)shortfallAge=age;if(depletedAge===null&&abp+cash<1&&s.capital>0)depletedAge=age;rows.push({age,openingAbp,openingCash,closingAbp:abp,closingCash:cash,accessibleBalance:abp+cash,agePension:assessment.payment,lifetimeIncome:life,otherIncome:p.otherIncome??0,spending:actualOwn+life+assessment.payment+(p.otherIncome??0),plannedOwn,actualOwn,withdrawal,reinvested:withdrawal-spentFromAbp,assessment});}
-const average=xs=>xs.length?xs.reduce((n,x)=>n+x.spending,0)/xs.length:0;return {rows,earlyIncome:average(rows.slice(0,10)),laterIncome:rows.length>10?average(rows.slice(10)):null,earlyYearsCount:Math.min(10,rows.length),laterYearsCount:Math.max(0,rows.length-10),earlyDraw,laterDraw,shortfallAge,depletedAge,futureBalance:rows.find(x=>x.age===90)?.openingAbp+rows.find(x=>x.age===90)?.openingCash||0};}
+export function project(p,s,prefs=defaultPreferences,controls=s.spendingControls??initialControls(prefs)){
+  let abp=s.accountBasedPension,cash=s.liquidReserve;
+  const a=s.lifeAllocation,life=calculateLifetimeIncome(s),r={Growth:.03,Balanced:.02,Conservative:.01}[s.investmentOption]+(p.returnAdjustment??0);
+  const earlyDraw=s.capital*(a.I/100*.095+a.F/100*.015),laterDraw=s.capital*(a.I/100*.035+a.F/100*.027)*[.9,1,1.15][prefs.laterSpending];
+  const initial=initialControls(prefs),enjoy=(controls.enjoy-initial.enjoy)/100,legacy=(controls.legacy-initial.legacy)/100,buffer=(controls.buffer-initial.buffer)/100;
+  // The entered income is the starting early-life budget. Exploration changes
+  // that budget; certainty changes its funding mix, rather than adding income twice.
+  const target=Math.max(0,p.desiredIncome||0),earlyBudget=target*clamp(1+.25*enjoy-.20*legacy-.08*buffer,.5,1.5);
+  const laterBudget=target*[.85,1,1.15][prefs.laterSpending]*[.85,1,1.1][prefs.earlyLifestyle]*clamp(1-.20*legacy-.04*buffer,.5,1.5);
+  const rows=[];let depletedAge=null,shortfallAge=null;
+  for(let age=p.retirementAge;age<=95;age++){
+    const t=age-p.retirementAge,assessment=pensionAssessment(p,s,age,{abp,cash}),otherIncome=p.otherIncome??0;
+    const ongoingIncome=life+assessment.payment+otherIncome;
+    const requestedIncome=target?(t<10?earlyBudget:laterBudget):ongoingIncome+(t<10?earlyDraw:laterDraw);
+    const plannedOwn=Math.max(0,requestedIncome-ongoingIncome),openingAbp=abp,openingCash=cash;
+    abp*=1+r;
+    const minRate=p.relationshipStatus==='couple'?minimumPensionRate(age)*s.memberShare+minimumPensionRate(s.partnerRetirementAge+t)*(1-s.memberShare):minimumPensionRate(age);
+    const minimumDraw=openingAbp*minRate*s.pensionFraction,withdrawal=Math.min(abp,Math.max(plannedOwn,minimumDraw));
+    const spentFromAbp=Math.min(plannedOwn,withdrawal);abp-=withdrawal;cash+=withdrawal-spentFromAbp;
+    const spentFromCash=Math.min(cash,Math.max(0,plannedOwn-spentFromAbp));cash-=spentFromCash;
+    const actualOwn=spentFromAbp+spentFromCash,shortfall=Math.max(0,plannedOwn-actualOwn);
+    if(shortfallAge===null&&shortfall>1)shortfallAge=age;
+    if(depletedAge===null&&abp+cash<1&&s.capital>0)depletedAge=age;
+    rows.push({age,openingAbp,openingCash,closingAbp:abp,closingCash:cash,accessibleBalance:abp+cash,agePension:assessment.payment,lifetimeIncome:life,otherIncome,
+      spending:actualOwn+ongoingIncome,plannedIncome:Math.max(requestedIncome,ongoingIncome),requestedIncome,shortfall,plannedOwn,actualOwn,spentFromAbp,spentFromCash,
+      accountBasedIncome:spentFromAbp*s.pensionFraction,otherSavingsIncome:spentFromAbp*(1-s.pensionFraction),reserveIncome:spentFromCash,
+      withdrawal,reinvested:withdrawal-spentFromAbp,assessment});
+  }
+  const average=xs=>xs.length?xs.reduce((n,x)=>n+x.spending,0)/xs.length:0;
+  return {rows,earlyIncome:average(rows.slice(0,10)),laterIncome:rows.length>10?average(rows.slice(10)):null,earlyYearsCount:Math.min(10,rows.length),laterYearsCount:Math.max(0,rows.length-10),earlyDraw,laterDraw,earlyBudget:target?earlyBudget:null,laterBudget:target?laterBudget:null,shortfallAge,depletedAge,futureBalance:rows.find(x=>x.age===90)?.openingAbp+rows.find(x=>x.age===90)?.openingCash||0};
+}
 export function calculateEarlyRetirementIncome(p,s,prefs){return project(p,s,prefs).earlyIncome;}
 export function calculateLaterRetirementIncome(p,s,prefs){return project(p,s,prefs).laterIncome;}
 export function calculateProjectedFutureBalance(p,s,prefs){return project(p,s,prefs).futureBalance;}
-export function calculate(p,prefs,c){const a=allocation(c,p),option=deriveInvestmentApproach(p,prefs,deriveInitialLifeAllocation(p,prefs)),s=deriveProductStructure(p,a,option),projection=project(p,s,prefs),assessment=pensionAssessment(p,s),at67=projection.rows.find(row=>row.age===Math.max(67,p.retirementAge)),lifetimeIncome=calculateLifetimeIncome(s);return {a,s,...projection,assessment,lifetimeIncome,agePension:assessment.payment,agePensionAt67:at67?.agePension??0,reliableIncome:lifetimeIncome+assessment.payment,accessibleCapital:calculateAccessibleCapital(s),reserve:s.liquidReserve};}
+export function calculate(p,prefs,c){const a=allocation(c,p),option=deriveInvestmentApproach(p,prefs,deriveInitialLifeAllocation(p,prefs)),s={...deriveProductStructure(p,a,option),spendingControls:{...c}},projection=project(p,s,prefs,c),assessment=pensionAssessment(p,s),at67=projection.rows.find(row=>row.age===Math.max(67,p.retirementAge)),lifetimeIncome=calculateLifetimeIncome(s);return {a,s,...projection,assessment,lifetimeIncome,agePension:assessment.payment,agePensionAt67:at67?.agePension??0,reliableIncome:lifetimeIncome+assessment.payment,accessibleCapital:calculateAccessibleCapital(s),reserve:s.liquidReserve};}
